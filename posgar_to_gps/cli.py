@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -65,9 +66,9 @@ def convert(x: Optional[str] = typer.Option(
 )
 ) -> None:
     """Convert the x and y POSGAR coordinates to latitude and longitude"""
-    conversor = getConversor(x, y, zone, decimal_point, as_degrees)
+    conversor = getConversor(zone, decimal_point)
     if conversor:
-        lat_long, error = conversor.convert(bool(as_degrees))
+        lat_long, error = conversor.convert(x, y, bool(as_degrees))
         if error:
             typer.secho(
                 f'Converting failed with "{ERRORS[error]}"', fg=typer.colors.RED
@@ -78,18 +79,78 @@ def convert(x: Optional[str] = typer.Option(
                 lat_long["lat"], lat_long["long"]), fg=typer.colors.BLUE)
 
 
-def getConversor(x: Optional[str], y: Optional[str], zone: Optional[str], decimal_point: Optional[str], as_degrees: Optional[str]):
-    if (not x and x != 0):
+@app.command()
+def convert_batch(
+    batch_file: Optional[str] = typer.Option(
+        None,
+        "--file",
+        "-f",
+        help="Batch file",
+        is_eager=True,
+    ),
+    delimiter: Optional[str] = typer.Option(
+        None,
+        "--delimiter",
+        "-d",
+        help="Batch element delimiter",
+        is_eager=True,
+    ),
+    decimal_point: Optional[str] = typer.Option(
+        ".",
+        "--decimal-point",
+        "-D",
+        help="Decimal point",
+        is_eager=True
+    ),
+    zone: Optional[str] = typer.Option(
+        None,
+        "--zone",
+        "-z",
+        help="POSGAR zone",
+        is_eager=True,
+    ),
+    as_degrees: bool = typer.Option(
+        False,
+        "--as-degrees",
+        "-D",
+        help="Show the result as degrees",
+        is_eager=True,
+    ),
+    output_file: Optional[str] = typer.Option(
+        None,
+        "--output-file",
+        "-o",
+        help="Output file",
+        is_eager=True,
+    )
+) -> None:
+    """Convert the x and y POSGAR coordinates to latitude and longitude"""
+    if(batch_file and not Path(batch_file).exists()):
         typer.secho(
-            'X coordinate not specified',
-            fg=typer.colors.RED,
+            f'Batch file not found', fg=typer.colors.RED
         )
-    elif (not y and y != 0):
+        raise typer.Exit(1)
+    if(not output_file):
         typer.secho(
-            'y coordinate not specified',
-            fg=typer.colors.RED,
+            f'Output file not specified', fg=typer.colors.RED
         )
-    elif (not zone and zone != 0):
+        raise typer.Exit(1)
+    conversor = getConversor(zone, decimal_point)
+    if conversor:
+        status, error = conversor.convert_batch(
+            bool(as_degrees), Path(batch_file) if batch_file else None, delimiter, decimal_point, Path(output_file))
+        if error:
+            typer.secho(
+                f'Converting failed with "{ERRORS[error]}"', fg=typer.colors.RED
+            )
+            raise typer.Exit(1)
+        else:
+            typer.secho("Conversion succeeded with status: {}".format(
+                status), fg=typer.colors.GREEN)
+
+
+def getConversor(zone: Optional[str], decimal_point: Optional[str]):
+    if (not zone and zone != 0):
         typer.secho(
             'POSGAR zone not specified',
             fg=typer.colors.RED,
@@ -99,30 +160,16 @@ def getConversor(x: Optional[str], y: Optional[str], zone: Optional[str], decima
             x = x.replace(decimal_point, ".")
             y = y.replace(decimal_point, ".")
         try:
-            x = float(x)
-            try:
-                y = float(y)
-                try:
-                    zone = int(zone)
-                    if(zone < 1 or zone > 7):
-                        typer.secho(
-                            'Zone must be a value between 1 and 7',
-                            fg=typer.colors.RED,
-                        )
-                    else:
-                        return conversor.Conversor(x, y, zone)
-                except ValueError:
-                    typer.secho(
-                        'Y coordinate not a number',
-                        fg=typer.colors.RED,
-                    )
-            except ValueError:
+            zone = int(zone)
+            if(zone < 1 or zone > 7):
                 typer.secho(
-                    'Y coordinate not a number',
+                    'Zone must be a value between 1 and 7',
                     fg=typer.colors.RED,
                 )
+            else:
+                return conversor.Conversor(zone)
         except ValueError:
             typer.secho(
-                'X coordinate not a number',
+                'Zone is not a number',
                 fg=typer.colors.RED,
             )
